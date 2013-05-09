@@ -1,26 +1,26 @@
 template ={}
 
-template.selectorist="""
+template.selectorist=Mustache.compile """
 <option value=''>Procedures</option>
 {{#rows}}
 <option value='{{count}}|{{name}}'>{{name}}</option>
 {{/rows}}
 """
+template.title=Mustache.compile "<p>{{what}} for <strong>{{key}}</strong></p>"
+template.extreams = Mustache.compile  """<strong>{{direction}}:</strong> {{hospital}} in {{city}}, {{state}} at <span class="text-{{highlight}}">${{price}}</span>"""
+template.median = Mustache.compile  """<strong>Median:</strong> ${{median}}"""
 
-template.bottom = """
-<p>{{what}} for <strong>{{key}}</strong></p>
-<dl>
-<dt>Cheapest</dt><dd>{{min.hospital}} in {{min.city}}, {{min.state}} at <span class="text-success">${{min.price}}</span></dd>
-<dt>Most Expensive</dt><dd>{{max.hospital}} in {{max.city}}, {{max.state}} at <span class="text-error">${{max.price}}</span></dd>
-<dt>Median</dt><dd>${{median}}</dd>
-</dl>
-"""
-compiledSel = Mustache.compile template.selectorist
-compiledBottom = Mustache.compile template.bottom
+
+reset=(clas)->
+	$("#medianRow #{clas}").html('')
+	$("#lowRow #{clas}").html('')
+	$("#highRow #{clas}").html('')
+	$("#titleRow #{clas}").html('')
 urlBase = 'https://calvin.iriscouch.com/meds/_design/medicare/_view/total'
 otherBase = 'https://calvin.iriscouch.com/meds/_design/medicare/_view/covered'
-makeView = (what,url,id)->
+makeView = (what,url,clas)->
 	(e)->
+		reset(clas)
 		unless e.target.value.indexOf '|' > -1
 			return true
 		data = e.target.value.split '|'
@@ -31,7 +31,8 @@ makeView = (what,url,id)->
 		outData={}
 		outData.key=key
 		outData.what=what
-		$.when($.ajax(
+		$("#titleRow #{clas}").html(template.title(outData))
+		$.ajax(
 			url:url
 			data:
 				startkey:"[\"#{key}\"]"
@@ -39,21 +40,25 @@ makeView = (what,url,id)->
 				limit:limit
 				reduce:false
 			dataType : "jsonp"
-		).then((data)->
+		).then (data)->
 			if limit is 2
 				outData.median = (0.5*(data.rows[0].value+data.rows[1].value)).toFixed(2).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
 			else
 				outData.median = data.rows[0].value.toFixed(2).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
-		),$.ajax(
+			$("#medianRow #{clas}").html(template.median(outData))
+		
+		$.ajax(
 			url:url
 			data:
 				startkey:"[\"#{key}\"]"
 				limit:1
 				reduce:false
 			dataType : "jsonp"
-		).then((data)->
-			outData.min = {state:data.rows[0].key[4],hospital:data.rows[0].key[2],city:data.rows[0].key[3],price:data.rows[0].key[1].toFixed(2).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-		),$.ajax(
+		).then (data)->
+			min = {direction:'Cheapest',highlight:'success',state:data.rows[0].key[4],hospital:data.rows[0].key[2],city:data.rows[0].key[3],price:data.rows[0].key[1].toFixed(2).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+			$("#lowRow #{clas}").html(template.extreams(min))
+		
+		$.ajax(
 			url:url
 			data:
 				startkey:"[\"#{key}\"]"
@@ -61,12 +66,11 @@ makeView = (what,url,id)->
 				skip:count-1
 				reduce:false
 			dataType : "jsonp"
-		).then((data)->
-			outData.max = {state:data.rows[0].key[4],hospital:data.rows[0].key[2],city:data.rows[0].key[3],price:data.rows[0].key[1].toFixed(2).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-		)).then ()->
-			$(id).html(compiledBottom(outData))
-bottom = makeView("Average Total Payment",urlBase,'#totrez')
-side = makeView("Average Covered Cost",otherBase,'#ctotrez')
+		).then (data)->
+			max = {direction:'Most Expensive',highlight:'error',state:data.rows[0].key[4],hospital:data.rows[0].key[2],city:data.rows[0].key[3],price:data.rows[0].key[1].toFixed(2).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+			$("#highRow #{clas}").html(template.extreams(max))
+bottom = makeView("Average Total Payment",urlBase,'.tot')
+side = makeView("Average Covered Cost",otherBase,'.covered')
 $.ajax(
 	url:urlBase
 	data:
@@ -79,7 +83,7 @@ $.ajax(
 			ret = row.value
 			ret.name = row.key[0]
 			ret
-	$('#totselect').html(compiledSel(out))
+	$('#totselect').html(template.selectorist(out))
 	$('#totselect').on 'change', bottom
 	$('#totselect').on 'change', side
 	true
